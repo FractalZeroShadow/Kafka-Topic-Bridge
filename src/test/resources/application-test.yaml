@@ -1,0 +1,12 @@
+spring:
+  kafka:
+    bootstrap-servers: ${spring.embedded.kafka.brokers}
+    consumer:
+      auto-offset-reset: earliest
+    producer:
+      retries: 0
+
+bridge:
+  source-topic: test-source-topic
+  target-topic: test-target-topic
+  target-kafka-brokers: ${spring.embedded.kafka.brokers}

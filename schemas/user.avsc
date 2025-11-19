@@ -1,0 +1,23 @@
+{
+  "type": "record",
+  "name": "User",
+  "namespace": "com.yourcompany.kafkabridge.avro",
+  "doc": "User record schema",
+  "fields": [
+    {
+      "name": "id",
+      "type": "string",
+      "doc": "Unique user identifier"
+    },
+    {
+      "name": "username",
+      "type": "string",
+      "doc": "Username"
+    },
+    {
+      "name": "email",
+      "type": "string",
+      "doc": "User email address"
+    }
+  ]
+}

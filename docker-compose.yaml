@@ -1,0 +1,149 @@
+services:
+  # Source Kafka Cluster (KRaft mode - Kafka 3.9.1)
+  source-kafka:
+    image: apache/kafka:3.9.1
+    hostname: source-kafka
+    container_name: source-kafka
+    ports:
+      - "29092:29092"
+    environment:
+      # KRaft configuration
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: 'broker,controller'
+      KAFKA_CONTROLLER_QUORUM_VOTERS: '1@source-kafka:9093'
+      KAFKA_CONTROLLER_LISTENER_NAMES: 'CONTROLLER'
+
+      # Listeners
+      KAFKA_LISTENERS: 'PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093,PLAINTEXT_HOST://0.0.0.0:29092'
+      KAFKA_ADVERTISED_LISTENERS: 'PLAINTEXT://source-kafka:9092,PLAINTEXT_HOST://localhost:29092'
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: 'CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT'
+      KAFKA_INTER_BROKER_LISTENER_NAME: 'PLAINTEXT'
+
+      # Cluster settings
+      CLUSTER_ID: 'ciWo7IWazngRchmPES6q5A=='
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+
+      # Auto create topics
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: 'true'
+
+      # Log settings
+      KAFKA_LOG_DIRS: '/tmp/kraft-combined-logs'
+    networks:
+      - kafka-bridge-network
+    healthcheck:
+      test: ["CMD-SHELL", "kafka-broker-api-versions.sh --bootstrap-server localhost:9092 || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 45s
+
+  # Target Kafka Cluster (KRaft mode - Kafka 3.9.1)
+  target-kafka:
+    image: apache/kafka:3.9.1
+    hostname: target-kafka
+    container_name: target-kafka
+    ports:
+      - "29093:29093"
+    environment:
+      # KRaft configuration
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: 'broker,controller'
+      KAFKA_CONTROLLER_QUORUM_VOTERS: '1@target-kafka:9094'
+      KAFKA_CONTROLLER_LISTENER_NAMES: 'CONTROLLER'
+
+      # Listeners
+      KAFKA_LISTENERS: 'PLAINTEXT://0.0.0.0:9093,CONTROLLER://0.0.0.0:9094,PLAINTEXT_HOST://0.0.0.0:29093'
+      KAFKA_ADVERTISED_LISTENERS: 'PLAINTEXT://target-kafka:9093,PLAINTEXT_HOST://localhost:29093'
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: 'CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT'
+      KAFKA_INTER_BROKER_LISTENER_NAME: 'PLAINTEXT'
+
+      # Cluster settings
+      CLUSTER_ID: 'r4ym2UI4R4ConZvgyJH3xw=='
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+
+      # Auto create topics
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: 'true'
+
+      # Log settings
+      KAFKA_LOG_DIRS: '/tmp/kraft-combined-logs'
+    networks:
+      - kafka-bridge-network
+    healthcheck:
+      test: ["CMD-SHELL", "kafka-broker-api-versions.sh --bootstrap-server localhost:9093 || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 45s
+
+  # Source Apicurio Registry
+  source-registry:
+    image: apicurio/apicurio-registry-mem:2.5.0.Final
+    container_name: source-registry
+    ports:
+      - "8080:8080"
+    environment:
+      QUARKUS_PROFILE: prod
+      KAFKA_BOOTSTRAP_SERVERS: source-kafka:9092
+      APPLICATION_ID: source-registry
+    depends_on:
+      source-kafka:
+        condition: service_started
+    networks:
+      - kafka-bridge-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health/ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+      start_period: 45s
+
+  # Target Apicurio Registry
+  target-registry:
+    image: apicurio/apicurio-registry-mem:2.5.0.Final
+    container_name: target-registry
+    ports:
+      - "8081:8080"
+    environment:
+      QUARKUS_PROFILE: prod
+      KAFKA_BOOTSTRAP_SERVERS: target-kafka:9093
+      APPLICATION_ID: target-registry
+    depends_on:
+      target-kafka:
+        condition: service_started
+    networks:
+      - kafka-bridge-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health/ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+      start_period: 45s
+
+  # Kafka UI
+  kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    container_name: kafka-ui
+    ports:
+      - "8090:8080"
+    environment:
+      KAFKA_CLUSTERS_0_NAME: source-cluster
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: source-kafka:9092
+      KAFKA_CLUSTERS_0_SCHEMAREGISTRY: http://source-registry:8080/apis/registry/v2
+      KAFKA_CLUSTERS_1_NAME: target-cluster
+      KAFKA_CLUSTERS_1_BOOTSTRAPSERVERS: target-kafka:9093
+      KAFKA_CLUSTERS_1_SCHEMAREGISTRY: http://target-registry:8080/apis/registry/v2
+    depends_on:
+      - source-kafka
+      - target-kafka
+    networks:
+      - kafka-bridge-network
+
+networks:
+  kafka-bridge-network:
+    driver: bridge
