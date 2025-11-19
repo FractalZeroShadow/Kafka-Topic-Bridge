@@ -18,7 +18,7 @@ stop:
 	./scripts/stop-infra.sh
 
 build:
-	mvn clean package
+	mvn clean package -DskipTests
 
 test:
 	mvn clean test
@@ -30,7 +30,7 @@ run-docker:
 	./scripts/run-service-docker.sh
 
 produce:
-	mvn exec:java -Dexec.mainClass="com.yourcompany.kafkabridge.TestProducerKt" -Dexec.classpathScope=test
+	mvn exec:java -Dexec.mainClass="com.yourcompany.kafkabridge.TestProducerKt"
 
 consume:
 	. ./scripts/venv/bin/activate && python3 ./scripts/python-avro-consumer.py

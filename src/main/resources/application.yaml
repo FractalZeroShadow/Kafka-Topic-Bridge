@@ -15,7 +15,7 @@ spring:
       properties:
         spring.deserializer.key.delegate.class: org.apache.kafka.common.serialization.StringDeserializer
         spring.deserializer.value.delegate.class: io.apicurio.registry.serde.avro.AvroKafkaDeserializer
-        apicurio.registry.url: http://localhost:8080/apis/ccompat/v7
+        apicurio.registry.url: http://localhost:8080/apis/registry/v2
         apicurio.registry.use-specific-avro-reader: false
 
     producer:
@@ -24,7 +24,7 @@ spring:
       acks: all
       properties:
         # Target Apicurio Registry for auto-registering schemas
-        apicurio.registry.url: http://localhost:8080/apis/ccompat/v7
+        apicurio.registry.url: http://localhost:8080/apis/registry/v2
         apicurio.registry.auto-register: true
         apicurio.registry.use-specific-avro-reader: false
 

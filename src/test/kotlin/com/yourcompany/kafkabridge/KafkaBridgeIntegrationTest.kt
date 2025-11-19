@@ -18,9 +18,11 @@ import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.test.context.TestPropertySource
 import java.time.Duration
 import java.util.*
+import org.junit.jupiter.api.Disabled
 
 private val logger = KotlinLogging.logger {}
 
+@Disabled("Run manually - requires Kafka infrastructure")
 @SpringBootTest
 @TestPropertySource(
     properties = [
