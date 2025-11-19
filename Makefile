@@ -41,5 +41,6 @@ clean: stop
 	./scripts/stop-infra.sh
 	docker volume prune -f
 	pkill -f kafka-bridge || true
+	[ -d target ] && rm -rf target
 
 all: start build test
