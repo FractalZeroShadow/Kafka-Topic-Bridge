@@ -10,11 +10,12 @@ spring:
       group-id: kafka-bridge-local
       auto-offset-reset: earliest
       enable-auto-commit: false
-      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
-      value-deserializer: io.apicurio.registry.serde.avro.AvroKafkaDeserializer
+      key-deserializer: org.springframework.kafka.support.serializer.ErrorHandlingDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.ErrorHandlingDeserializer
       properties:
-        # Source Apicurio Registry for deserializing incoming messages
-        apicurio.registry.url: http://localhost:8080/apis/registry/v2
+        spring.deserializer.key.delegate.class: org.apache.kafka.common.serialization.StringDeserializer
+        spring.deserializer.value.delegate.class: io.apicurio.registry.serde.avro.AvroKafkaDeserializer
+        apicurio.registry.url: http://localhost:8080/apis/ccompat/v7
         apicurio.registry.use-specific-avro-reader: false
 
     producer:
@@ -23,7 +24,7 @@ spring:
       acks: all
       properties:
         # Target Apicurio Registry for auto-registering schemas
-        apicurio.registry.url: http://localhost:8081/apis/registry/v2
+        apicurio.registry.url: http://localhost:8080/apis/ccompat/v7
         apicurio.registry.auto-register: true
         apicurio.registry.use-specific-avro-reader: false
 
@@ -59,3 +60,4 @@ logging:
     org.springframework.kafka: INFO
     org.apache.kafka: WARN
     io.apicurio: DEBUG
+    io.apicurio.registry: DEBUG

@@ -83,7 +83,7 @@ services:
 
   # Source Apicurio Registry
   source-registry:
-    image: apicurio/apicurio-registry-mem:2.5.0.Final
+    image: apicurio/apicurio-registry-mem:2.6.0.Final
     container_name: source-registry
     ports:
       - "8080:8080"
@@ -105,7 +105,7 @@ services:
 
   # Target Apicurio Registry
   target-registry:
-    image: apicurio/apicurio-registry-mem:2.5.0.Final
+    image: apicurio/apicurio-registry-mem:2.6.0.Final
     container_name: target-registry
     ports:
       - "8081:8080"

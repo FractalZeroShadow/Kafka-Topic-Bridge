@@ -24,7 +24,7 @@
         <maven.compiler.target>21</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
 
-        <apicurio.version>2.5.0.Final</apicurio.version>
+        <apicurio.version>2.6.0.Final</apicurio.version>
         <avro.version>1.12.0</avro.version>
         <kotlin-logging.version>3.0.5</kotlin-logging.version>
     </properties>
