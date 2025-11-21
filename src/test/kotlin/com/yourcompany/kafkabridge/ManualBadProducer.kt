@@ -48,7 +48,6 @@ fun main() {
     // ======================================================
     // PHASE 2: Schema Evolution (V2 - Backward Compatible)
     // ======================================================
-    // Added 'city' with default value
     val userSchemaV2 = """
         {
           "type": "record", "name": "User", "namespace": "com.test.avro",
@@ -59,7 +58,6 @@ fun main() {
           ]
         }
     """
-    // Added 'category'
     val productSchemaV2 = """
         {
           "type": "record", "name": "Product", "namespace": "com.test.avro",
@@ -71,7 +69,6 @@ fun main() {
           ]
         }
     """
-    // Added 'currency'
     val orderSchemaV2 = """
         {
           "type": "record", "name": "Order", "namespace": "com.test.avro",
@@ -96,9 +93,7 @@ fun main() {
 
     KafkaProducer<String, Any>(avroConfig).use { producer ->
 
-        // Helper to produce a record
         fun send(topic: String, schemaStr: String, fieldSetter: (GenericData.Record) -> Unit) {
-            // Parse schema fresh each time to handle re-definitions (V1 vs V2) in this simple script
             val schema = Schema.Parser().parse(schemaStr)
             val record = GenericData.Record(schema).apply(fieldSetter)
             val key = "key-${System.currentTimeMillis()}"
@@ -124,38 +119,35 @@ fun main() {
             it.put("amount", 150.50)
         }
 
-        Thread.sleep(1000) // Slight delay between batches
+        Thread.sleep(1000)
 
         // --- Batch 2: Evolved V2 ---
         send("test-source-1", userSchemaV2) {
             it.put("username", "bob_evolved")
             it.put("age", 25)
-            it.put("city", "New York") // New Field
+            it.put("city", "New York")
         }
         send("test-source-2", productSchemaV2) {
             it.put("sku", "PROD-222")
             it.put("price", 199.99)
             it.put("active", true)
-            it.put("category", "Electronics") // New Field
+            it.put("category", "Electronics")
         }
         send("test-source-3", orderSchemaV2) {
             it.put("orderId", "ORD-777")
             it.put("amount", 300.00)
-            it.put("currency", "EUR") // New Field
+            it.put("currency", "EUR")
         }
 
         producer.flush()
     }
 
     println("\n--- 2. SENDING POISON PILL (TRIGGER DLT) ---")
-    // To simulate a "Bad Message" that crashes the Avro deserializer/bridge,
-    // we send raw String data instead of Avro bytes.
-    // The Bridge (expecting Avro magic bytes) will fail to deserialize this.
 
     val rawConfig = mapOf(
         ProducerConfig.BOOTSTRAP_SERVERS_CONFIG to bootstrapServers,
         ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG to StringSerializer::class.java,
-        ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG to StringSerializer::class.java // <--- Intentionally String
+        ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG to StringSerializer::class.java
     )
 
     KafkaProducer<String, String>(rawConfig).use { rawProducer ->
