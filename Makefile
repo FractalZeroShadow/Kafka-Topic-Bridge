@@ -14,6 +14,7 @@ help:
 	@echo "  make consume     - Consume from target cluster"
 	@echo "  make clean       - Stop everything and clean build"
 	@echo "  make full-wipe   - Stop and delete ALL containers, volumes, and images"
+	@echo "  make regression  - Run full infrastructure regression test"
 
 start:
 	./scripts/start-infra.sh
@@ -26,6 +27,9 @@ build:
 
 test:
 	mvn clean test
+
+regression:
+	./scripts/test-full-regression.sh
 
 run: build
 	mvn spring-boot:run
