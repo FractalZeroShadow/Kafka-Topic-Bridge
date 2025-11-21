@@ -5,8 +5,9 @@ set -e
 echo "Starting infrastructure..."
 docker compose up -d
 
-#echo "Waiting 60 seconds for services to start..."
-#sleep 60
+TIME=5
+echo "Waiting $TIME seconds for services to start..."
+sleep $TIME
 
 echo ""
 echo "Services:"

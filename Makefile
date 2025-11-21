@@ -40,9 +40,8 @@ consume:
 	mvn exec:java -Dexec.mainClass="com.yourcompany.kafkabridge.TestConsumerKt"
 
 clean: stop
-	docker rmi kafka-bridge:latest || true
 	docker volume prune -f
 	mvn clean
 	[ -d target ] && rm -rf target || true
 
-all: start build test
+all: start build run

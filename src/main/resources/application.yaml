@@ -43,3 +43,9 @@ bridge:
     test-source-1: test-target-1
     test-source-2: test-target-2
     test-source-3: test-target-3
+
+  # DLT Mappings: Source Topic -> Dead Letter Topic
+  dlt-mappings:
+    test-source-1: test-target-1-dlt
+    test-source-2: test-target-2-dlt
+    test-source-3: test-target-3-dlt

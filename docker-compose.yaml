@@ -105,7 +105,7 @@ services:
     networks:
       - kafka-bridge-network
     healthcheck:
-      test: ["CMD-SHELL", "kafka-broker-api-versions.sh --bootstrap-server localhost:9093 || exit 1"]
+      test: ["CMD-SHELL", "kafka-broker-api-versions.sh --bootstrap-server localhost:29093 || exit 1"]
       interval: 15s
       timeout: 10s
       retries: 10
