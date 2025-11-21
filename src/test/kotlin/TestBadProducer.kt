@@ -1,5 +1,3 @@
-package com.yourcompany.kafkabridge
-
 import io.confluent.kafka.serializers.AbstractKafkaSchemaSerDeConfig
 import io.confluent.kafka.serializers.KafkaAvroSerializer
 import org.apache.avro.Schema
@@ -95,7 +93,6 @@ fun main() {
     println("--- 1. SENDING NORMAL & EVOLVED AVRO MESSAGES ---")
 
     KafkaProducer<String, Any>(avroConfig).use { producer ->
-        val parser = Schema.Parser()
 
         // Helper to produce a record
         fun send(topic: String, schemaStr: String, fieldSetter: (GenericData.Record) -> Unit) {
