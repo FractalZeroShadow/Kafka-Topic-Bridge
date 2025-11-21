@@ -1,3 +1,5 @@
+package com.yourcompany.kafkabridge.com.yourcompany.kafkabridge
+
 import io.confluent.kafka.serializers.AbstractKafkaSchemaSerDeConfig
 import io.confluent.kafka.serializers.KafkaAvroSerializer
 import org.apache.avro.Schema

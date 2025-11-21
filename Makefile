@@ -13,6 +13,7 @@ help:
 	@echo "  make produce-bad - Send test message with schema evolution and poison pill"
 	@echo "  make consume     - Consume from target cluster"
 	@echo "  make clean       - Stop everything and clean build"
+	@echo "  make full-wipe   - Stop and delete ALL containers, volumes, and images"
 
 start:
 	./scripts/start-infra.sh
@@ -36,15 +37,22 @@ run-docker:
 	./scripts/run-service-docker.sh
 
 produce:
-	mvn exec:java -Dexec.classpathScope=test -Dexec.mainClass="com.yourcompany.kafkabridge.TestProducerKt"
+	mvn test-compile exec:java -Dexec.classpathScope=test -Dexec.mainClass="com.yourcompany.kafkabridge.ManualProducerKt"
 
 produce-bad:
-	mvn exec:java -Dexec.classpathScope=test -Dexec.mainClass="com.yourcompany.kafkabridge.TestBadProducerKt"
+	mvn test-compile exec:java -Dexec.classpathScope=test -Dexec.mainClass="com.yourcompany.kafkabridge.ManualBadProducerKt"
 
 consume:
-	mvn exec:java -Dexec.mainClass="com.yourcompany.kafkabridge.TestConsumerKt"
+	mvn test-compile exec:java -Dexec.classpathScope=test -Dexec.mainClass="com.yourcompany.kafkabridge.ManualConsumerKt"
 
 clean: stop
+	docker volume prune -f
+	mvn clean
+	[ -d target ] && rm -rf target || true
+
+full-wipe:
+	docker compose down -v --rmi all
+	docker rmi -f kafka-bridge:latest || true
 	docker volume prune -f
 	mvn clean
 	[ -d target ] && rm -rf target || true
