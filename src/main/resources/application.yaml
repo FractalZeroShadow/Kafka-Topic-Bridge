@@ -38,9 +38,8 @@ bridge:
   preserve-timestamp: true
   target-kafka-brokers: localhost:29093
 
-  # REMOVED: topics: ...
-  # ADDED: topic-mappings
+  # Mappings: Source Topic -> Target Topic
   topic-mappings:
-    source-users-v1-legacy: users-clean
-    source-orders-bad-name: orders-clean
-    simple-topic: simple-topic
+    test-source-1: test-target-1
+    test-source-2: test-target-2
+    test-source-3: test-target-3

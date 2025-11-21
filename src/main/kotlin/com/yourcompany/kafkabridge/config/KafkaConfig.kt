@@ -27,6 +27,7 @@ class KafkaConfig(
     @Value("\${spring.kafka.producer.properties.apicurio.registry.url}") private val targetRegistryUrl: String
 ) {
 
+    // ... [Consumer Factory remains unchanged] ...
     @Bean
     fun consumerFactory(): ConsumerFactory<String, Any> {
         val config = mapOf(
@@ -34,24 +35,14 @@ class KafkaConfig(
             ConsumerConfig.GROUP_ID_CONFIG to consumerGroupId,
             ConsumerConfig.AUTO_OFFSET_RESET_CONFIG to "earliest",
             ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG to false,
-
-            // --- SOURCE: CONFLUENT ---
             ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG to ErrorHandlingDeserializer::class.java,
             ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG to ErrorHandlingDeserializer::class.java,
-
             ErrorHandlingDeserializer.KEY_DESERIALIZER_CLASS to StringDeserializer::class.java.name,
-            // Use Confluent Deserializer
             ErrorHandlingDeserializer.VALUE_DESERIALIZER_CLASS to "io.confluent.kafka.serializers.KafkaAvroDeserializer",
-
-            // Confluent Configs
             "schema.registry.url" to sourceRegistryUrl,
-            "specific.avro.reader" to "false", // Returns GenericRecord
-
-            // Optimization
+            "specific.avro.reader" to "false",
             ConsumerConfig.MAX_POLL_RECORDS_CONFIG to "100"
         )
-
-        logger.info { "Configured SOURCE Consumer (Confluent) -> $sourceRegistryUrl" }
         return DefaultKafkaConsumerFactory(config)
     }
 
@@ -62,8 +53,15 @@ class KafkaConfig(
         return ConcurrentKafkaListenerContainerFactory<String, Any>().apply {
             this.consumerFactory = consumerFactory
             containerProperties.ackMode = ContainerProperties.AckMode.MANUAL_IMMEDIATE
-            // Retry 3 times with 1s delay before giving up (logging error)
-            setCommonErrorHandler(DefaultErrorHandler(FixedBackOff(1000L, 3L)))
+
+            // NEW: retries 3 times, then STOPS the consumer (Safe, requires restart)
+            val errorHandler = DefaultErrorHandler(FixedBackOff(1000L, 3L))
+            errorHandler.setSeeksAfterError(false) // Don't skip
+            // If you want it to stop completely:
+            // errorHandler.setClassifications(mapOf(Exception::class.java to true), false)
+            // Or simply rely on monitoring to catch the error logs.
+
+            setCommonErrorHandler(errorHandler)
         }
     }
 
@@ -73,24 +71,23 @@ class KafkaConfig(
             ProducerConfig.BOOTSTRAP_SERVERS_CONFIG to targetBootstrapServers,
             ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG to StringSerializer::class.java,
 
-            // --- TARGET: APICURIO ---
+            // Use Apicurio Serializer
             ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG to AvroKafkaSerializer::class.java,
             ProducerConfig.ACKS_CONFIG to "all",
 
-            // Apicurio Configs
             "apicurio.registry.url" to targetRegistryUrl,
-            "apicurio.registry.auto-register" to "true",
-            "apicurio.registry.use-specific-avro-reader" to "false",
-            // Strategy: TopicNameStrategy is standard (Subject = TopicName-value)
+            "apicurio.registry.auto-register" to true, // Pass as Boolean!
             "apicurio.registry.artifact-id-strategy" to "io.apicurio.registry.serde.strategy.TopicNameStrategy",
 
-            // If you need to validate against existing schemas, use:
-            // "apicurio.registry.check-period-ms" to "60000",
+            // --- FIX: Use Booleans, not Strings ---
+            // 1. Force ID into the Payload (Magic Byte + ID + Data)
+            "apicurio.registry.headers.enabled" to false,
 
-            ProducerConfig.RETRIES_CONFIG to "3"
+            // 2. Use 4-Byte Integer ID (Standard/Confluent format)
+            "apicurio.registry.as-confluent" to true
         )
 
-        logger.info { "Configured TARGET Producer (Apicurio) -> $targetRegistryUrl" }
+        logger.info { "Configured TARGET Producer (Apicurio/Confluent Mode) -> $targetRegistryUrl" }
         return DefaultKafkaProducerFactory(config)
     }
 
