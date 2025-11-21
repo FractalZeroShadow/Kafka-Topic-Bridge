@@ -1,4 +1,4 @@
-package com.yourcompany.kafkabridge.com.yourcompany.kafkabridge
+package com.yourcompany.kafkabridge
 
 import io.confluent.kafka.serializers.AbstractKafkaSchemaSerDeConfig
 import io.confluent.kafka.serializers.KafkaAvroSerializer
