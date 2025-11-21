@@ -49,3 +49,9 @@ bridge:
     test-source-1: test-target-1-dlt
     test-source-2: test-target-2-dlt
     test-source-3: test-target-3-dlt
+
+  # Default Backoff intervals (30s, 5m, 15m)
+  retry-intervals-ms:
+    - 30000   # 30 seconds
+    - 300000  # 5 minutes
+    - 900000  # 15 minutes
