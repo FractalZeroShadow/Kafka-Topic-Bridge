@@ -151,7 +151,7 @@ services:
       # Target Cluster (Apache + Apicurio)
       KAFKA_CLUSTERS_1_NAME: target-cluster-kraft
       KAFKA_CLUSTERS_1_BOOTSTRAPSERVERS: target-kafka:9093
-      KAFKA_CLUSTERS_1_SCHEMAREGISTRY: http://target-registry:8080/apis/registry/v2
+      KAFKA_CLUSTERS_1_SCHEMAREGISTRY: http://target-registry:8080/apis/ccompat/v7
     depends_on:
       - source-kafka
       - target-kafka
