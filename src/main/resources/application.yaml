@@ -14,50 +14,33 @@ spring:
       value-deserializer: org.springframework.kafka.support.serializer.ErrorHandlingDeserializer
       properties:
         spring.deserializer.key.delegate.class: org.apache.kafka.common.serialization.StringDeserializer
-        spring.deserializer.value.delegate.class: io.apicurio.registry.serde.avro.AvroKafkaDeserializer
-        apicurio.registry.url: http://localhost:8080/apis/registry/v2
-        apicurio.registry.use-specific-avro-reader: false
+        spring.deserializer.value.delegate.class: io.confluent.kafka.serializers.KafkaAvroDeserializer
+        # Source Confluent Registry
+        schema.registry.url: ${SOURCE_REGISTRY_URL:http://localhost:8081}
+        specific.avro.reader: false
 
     producer:
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
       value-serializer: io.apicurio.registry.serde.avro.AvroKafkaSerializer
       acks: all
       properties:
-        # Target Apicurio Registry for auto-registering schemas
-        apicurio.registry.url: http://localhost:8080/apis/registry/v2
+        # Target Apicurio Registry
+        apicurio.registry.url: http://localhost:8082/apis/registry/v2
         apicurio.registry.auto-register: true
         apicurio.registry.use-specific-avro-reader: false
+        apicurio.registry.artifact-id-strategy: io.apicurio.registry.serde.strategy.TopicNameStrategy
 
     listener:
       ack-mode: manual
 
-# Bridge-specific configuration
+# Bridge Configuration
 bridge:
-  source-topic: source-users
-  target-topic: target-users
-  # Target Kafka cluster (where we produce to)
+  preserve-timestamp: true
   target-kafka-brokers: localhost:29093
 
-# Actuator endpoints for monitoring
-management:
-  endpoints:
-    web:
-      exposure:
-        include: health,metrics,prometheus,info
-  endpoint:
-    health:
-      show-details: always
-  metrics:
-    export:
-      prometheus:
-        enabled: true
-
-# Logging configuration
-logging:
-  level:
-    root: INFO
-    com.yourcompany.kafkabridge: DEBUG
-    org.springframework.kafka: INFO
-    org.apache.kafka: WARN
-    io.apicurio: DEBUG
-    io.apicurio.registry: DEBUG
+  # REMOVED: topics: ...
+  # ADDED: topic-mappings
+  topic-mappings:
+    source-users-v1-legacy: users-clean
+    source-orders-bad-name: orders-clean
+    simple-topic: simple-topic

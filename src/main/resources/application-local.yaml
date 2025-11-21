@@ -1,29 +1,21 @@
 spring:
   kafka:
+    # Override Source to Localhost
     bootstrap-servers: localhost:29092
+
     consumer:
-      group-id: kafka-bridge-local
-      auto-offset-reset: earliest
-      enable-auto-commit: false
-      key-deserializer: org.springframework.kafka.support.serializer.ErrorHandlingDeserializer
-      value-deserializer: org.springframework.kafka.support.serializer.ErrorHandlingDeserializer
       properties:
-        spring.deserializer.key.delegate.class: org.apache.kafka.common.serialization.StringDeserializer
-        spring.deserializer.value.delegate.class: io.apicurio.registry.serde.avro.AvroKafkaDeserializer
-        apicurio.registry.url: http://localhost:8080/apis/registry/v2
-        apicurio.registry.use-specific-avro-reader: false
+        # Local Confluent Registry
+        schema.registry.url: http://localhost:8081
+        # Disable Auth/SSL for local
+        basic.auth.credentials.source: URL
+
+    # Override Target to Localhost
     producer:
-      key-serializer: org.apache.kafka.common.serialization.StringSerializer
-      value-serializer: io.apicurio.registry.serde.avro.AvroKafkaSerializer
-      acks: all
+      bootstrap-servers: localhost:29093
       properties:
-        apicurio.registry.url: http://localhost:8080/apis/registry/v2
-        apicurio.registry.auto-register: true
-        apicurio.registry.use-specific-avro-reader: false
-    listener:
-      ack-mode: manual
+        # Local Apicurio Registry
+        apicurio.registry.url: http://localhost:8082/apis/registry/v2
 
 bridge:
-  source-topic: source-users
-  target-topic: target-users
   target-kafka-brokers: localhost:29093

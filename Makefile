@@ -15,13 +15,17 @@ start:
 	./scripts/start-infra.sh
 
 stop:
-	./scripts/stop-infra.sh
+	docker compose down -v
 
 build:
 	mvn clean package -DskipTests
 
 test:
 	mvn clean test
+
+run:
+	mvn clean package -DskipTests
+	mvn spring-boot:run
 
 run-local:
 	mvn spring-boot:run -Dspring-boot.run.profiles=local
@@ -33,14 +37,12 @@ produce:
 	mvn exec:java -Dexec.mainClass="com.yourcompany.kafkabridge.TestProducerKt"
 
 consume:
-	. ./scripts/venv/bin/activate && python3 ./scripts/python-avro-consumer.py
+	mvn exec:java -Dexec.mainClass="com.yourcompany.kafkabridge.TestConsumerKt"
 
 clean: stop
-	mvn clean
 	docker rmi kafka-bridge:latest || true
-	./scripts/stop-infra.sh
 	docker volume prune -f
-	pkill -f kafka-bridge || true
-	[ -d target ] && rm -rf target
+	mvn clean
+	[ -d target ] && rm -rf target || true
 
 all: start build test

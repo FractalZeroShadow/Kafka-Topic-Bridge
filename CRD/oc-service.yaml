@@ -1,0 +1,38 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kafka-bridge
+spec:
+  template:
+    spec:
+      containers:
+        - name: bridge
+          image: your-registry/kafka-bridge:latest
+          env:
+            # Pass passwords via Env Vars so they aren't hardcoded in the JKS URL
+            - name: SOURCE_TRUSTSTORE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: source-kafka-certs
+                  key: password
+            - name: TARGET_TRUSTSTORE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: target-kafka-certs
+                  key: password
+          volumeMounts:
+            # Mount Their Certs
+            - name: source-certs
+              mountPath: "/etc/secrets/source"
+              readOnly: true
+            # Mount Your Certs
+            - name: target-certs
+              mountPath: "/etc/secrets/target"
+              readOnly: true
+      volumes:
+        - name: source-certs
+          secret:
+            secretName: source-kafka-certs
+        - name: target-certs
+          secret:
+            secretName: target-kafka-certs

@@ -1,12 +1,13 @@
 package com.yourcompany.kafkabridge.service
 
+import com.yourcompany.kafkabridge.config.BridgeProperties
 import io.micrometer.core.instrument.Counter
 import io.micrometer.core.instrument.MeterRegistry
 import io.micrometer.core.instrument.Timer
 import mu.KotlinLogging
-import org.apache.avro.generic.GenericRecord
 import org.apache.kafka.clients.consumer.ConsumerRecord
-import org.springframework.beans.factory.annotation.Value
+import org.apache.kafka.clients.producer.ProducerRecord
+import org.apache.kafka.common.header.internals.RecordHeader
 import org.springframework.kafka.annotation.KafkaListener
 import org.springframework.kafka.core.KafkaTemplate
 import org.springframework.kafka.support.Acknowledgment
@@ -20,23 +21,19 @@ private val logger = KotlinLogging.logger {}
 class KafkaBridgeService(
     private val targetKafkaTemplate: KafkaTemplate<String, Any>,
     private val meterRegistry: MeterRegistry,
-    @Value("\${bridge.target-topic}") private val targetTopic: String
+    // CHANGED: We inject BridgeProperties instead of @Value for timestamp/topics
+    private val bridgeProperties: BridgeProperties
 ) {
 
-    private val messagesProcessed: Counter = Counter.builder("kafka.bridge.messages.processed")
-        .description("Total number of messages successfully bridged")
-        .register(meterRegistry)
+    private val messagesProcessed: Counter = Counter.builder("kafka.bridge.messages.processed").register(meterRegistry)
+    private val messagesFailed: Counter = Counter.builder("kafka.bridge.messages.failed").register(meterRegistry)
+    private val bridgeTimer: Timer = Timer.builder("kafka.bridge.processing.time").register(meterRegistry)
 
-    private val messagesFailed: Counter = Counter.builder("kafka.bridge.messages.failed")
-        .description("Total number of messages that failed to bridge")
-        .register(meterRegistry)
-
-    private val bridgeTimer: Timer = Timer.builder("kafka.bridge.processing.time")
-        .description("Time taken to bridge messages")
-        .register(meterRegistry)
-
+    /**
+     * SpEL expression fetches the set of keys from the 'topicMappings' map in BridgeProperties bean.
+     */
     @KafkaListener(
-        topics = ["\${bridge.source-topic}"],
+        topics = ["#{bridgeProperties.topicMappings.keySet()}"],
         containerFactory = "kafkaListenerContainerFactory"
     )
     fun consumeAndProduce(
@@ -46,52 +43,67 @@ class KafkaBridgeService(
         val sample = Timer.start(meterRegistry)
 
         try {
-            logger.debug {
-                "Received message - Topic: ${record.topic()}, " +
-                        "Partition: ${record.partition()}, " +
-                        "Offset: ${record.offset()}, " +
-                        "Key: ${record.key()}"
-            }
+            // 1. Resolve Target Topic from Map
+            val targetTopicName = bridgeProperties.topicMappings[record.topic()]
+                ?: throw IllegalStateException("No target mapping found for source topic: ${record.topic()}")
 
-            // The value is a GenericRecord (Avro)
+            // 2. Deserialize Value (GenericRecord from Confluent Deserializer)
             val avroValue = record.value()
 
-            // Log schema information if it's a GenericRecord
-            if (avroValue is GenericRecord) {
-                logger.debug { "Schema: ${avroValue.schema.fullName}" }
+            // 3. Timestamp Strategy from Properties
+            val targetTimestamp = if (bridgeProperties.preserveTimestamp) {
+                record.timestamp()
+            } else {
+                null
             }
 
-            // Send to target cluster - the AvroKafkaSerializer will automatically
-            // register the schema in the target registry
+            // 4. Header Filtering
+            val ignoredHeaders = setOf(
+                "apicurio.registry.global-id",
+                "apicurio.registry.version",
+                "apicurio.registry.content-hash"
+            )
+
+            val cleanHeaders = record.headers().mapNotNull { header ->
+                if (header.key() in ignoredHeaders) null
+                else RecordHeader(header.key(), header.value())
+            }
+
+            // 5. Construct ProducerRecord with MAPPED target name
+            val producerRecord = ProducerRecord(
+                targetTopicName,
+                null,
+                targetTimestamp,
+                record.key(),
+                avroValue,
+                cleanHeaders
+            )
+
+            // 6. Send
             val future: CompletableFuture<SendResult<String, Any>> =
-                targetKafkaTemplate.send(targetTopic, record.key(), avroValue)
+                targetKafkaTemplate.send(producerRecord)
 
-            val sendResult = future.get()
-
-            logger.info {
-                "Successfully bridged message - " +
-                        "Key: ${record.key()}, " +
-                        "Source: ${record.topic()}/${record.partition()}@${record.offset()}, " +
-                        "Target: ${sendResult.recordMetadata.topic()}/" +
-                        "${sendResult.recordMetadata.partition()}@${sendResult.recordMetadata.offset()}"
+            future.whenComplete { result, ex ->
+                if (ex == null) {
+                    logger.debug {
+                        "Bridged ${record.topic()} -> $targetTopicName [Offset: ${result.recordMetadata.offset()}]"
+                    }
+                    acknowledgment.acknowledge()
+                    messagesProcessed.increment()
+                    sample.stop(bridgeTimer)
+                } else {
+                    logger.error(ex) { "Failed to send to target topic: $targetTopicName" }
+                    messagesFailed.increment()
+                    sample.stop(bridgeTimer)
+                    // Throwing here triggers the container's ErrorHandler (Retry/Seek)
+                    throw RuntimeException("Bridge send failed", ex)
+                }
             }
-
-            acknowledgment.acknowledge()
-            messagesProcessed.increment()
-            sample.stop(bridgeTimer)
 
         } catch (e: Exception) {
-            logger.error(e) {
-                "Failed to bridge message - " +
-                        "Topic: ${record.topic()}, " +
-                        "Partition: ${record.partition()}, " +
-                        "Offset: ${record.offset()}, " +
-                        "Key: ${record.key()}"
-            }
+            logger.error(e) { "Fatal error bridging message key: ${record.key()}" }
             messagesFailed.increment()
             sample.stop(bridgeTimer)
-
-            // Don't acknowledge - this will cause a retry based on your error handling strategy
             throw e
         }
     }

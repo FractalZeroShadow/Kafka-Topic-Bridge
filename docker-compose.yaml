@@ -1,46 +1,76 @@
 services:
-  # Source Kafka Cluster (KRaft mode - Kafka 3.9.1)
+  # ---------------------------------------------------------
+  # Source Cluster (Confluent Platform 7.1.1 - ZooKeeper Mode)
+  # ---------------------------------------------------------
+
+  source-zookeeper:
+    image: confluentinc/cp-zookeeper:7.1.1
+    hostname: source-zookeeper
+    container_name: source-zookeeper
+    ports:
+      - "2181:2181"
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    networks:
+      - kafka-bridge-network
+
   source-kafka:
-    image: apache/kafka:3.9.1
+    image: confluentinc/cp-kafka:7.1.1
     hostname: source-kafka
     container_name: source-kafka
+    depends_on:
+      - source-zookeeper
     ports:
       - "29092:29092"
     environment:
-      # KRaft configuration
-      KAFKA_NODE_ID: 1
-      KAFKA_PROCESS_ROLES: 'broker,controller'
-      KAFKA_CONTROLLER_QUORUM_VOTERS: '1@source-kafka:9093'
-      KAFKA_CONTROLLER_LISTENER_NAMES: 'CONTROLLER'
-
-      # Listeners
-      KAFKA_LISTENERS: 'PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093,PLAINTEXT_HOST://0.0.0.0:29092'
-      KAFKA_ADVERTISED_LISTENERS: 'PLAINTEXT://source-kafka:9092,PLAINTEXT_HOST://localhost:29092'
-      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: 'CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT'
-      KAFKA_INTER_BROKER_LISTENER_NAME: 'PLAINTEXT'
-
-      # Cluster settings
-      CLUSTER_ID: 'ciWo7IWazngRchmPES6q5A=='
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: 'source-zookeeper:2181'
+      # Listener configuration
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://source-kafka:9092,PLAINTEXT_HOST://localhost:29092
+      # Replication settings for single node
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
       KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
       KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
-      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
-
       # Auto create topics
       KAFKA_AUTO_CREATE_TOPICS_ENABLE: 'true'
-
-      # Log settings
-      KAFKA_LOG_DIRS: '/tmp/kraft-combined-logs'
     networks:
       - kafka-bridge-network
     healthcheck:
-      test: ["CMD-SHELL", "kafka-broker-api-versions.sh --bootstrap-server localhost:9092 || exit 1"]
+      test: ["CMD", "kafka-broker-api-versions", "--bootstrap-server", "localhost:9092"]
       interval: 15s
       timeout: 10s
       retries: 10
-      start_period: 45s
+      start_period: 30s
 
-  # Target Kafka Cluster (KRaft mode - Kafka 3.9.1)
+  source-registry:
+    image: confluentinc/cp-schema-registry:7.1.1
+    hostname: source-registry
+    container_name: source-registry
+    depends_on:
+      source-kafka:
+        condition: service_healthy
+    ports:
+      - "8081:8081"
+    environment:
+      SCHEMA_REGISTRY_HOST_NAME: source-registry
+      SCHEMA_REGISTRY_KAFKASTORE_BOOTSTRAP_SERVERS: 'source-kafka:9092'
+      SCHEMA_REGISTRY_LISTENERS: http://0.0.0.0:8081
+    networks:
+      - kafka-bridge-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8081"]
+      interval: 20s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+  # ---------------------------------------------------------
+  # Target Cluster (Apache Kafka 3.9.1 - KRaft Mode)
+  # ---------------------------------------------------------
+
   target-kafka:
     image: apache/kafka:3.9.1
     hostname: target-kafka
@@ -81,34 +111,11 @@ services:
       retries: 10
       start_period: 45s
 
-  # Source Apicurio Registry
-  source-registry:
-    image: apicurio/apicurio-registry-mem:2.6.0.Final
-    container_name: source-registry
-    ports:
-      - "8080:8080"
-    environment:
-      QUARKUS_PROFILE: prod
-      KAFKA_BOOTSTRAP_SERVERS: source-kafka:9092
-      APPLICATION_ID: source-registry
-    depends_on:
-      source-kafka:
-        condition: service_started
-    networks:
-      - kafka-bridge-network
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/health/ready"]
-      interval: 10s
-      timeout: 5s
-      retries: 15
-      start_period: 45s
-
-  # Target Apicurio Registry
   target-registry:
     image: apicurio/apicurio-registry-mem:2.6.0.Final
     container_name: target-registry
     ports:
-      - "8081:8080"
+      - "8082:8080"
     environment:
       QUARKUS_PROFILE: prod
       KAFKA_BOOTSTRAP_SERVERS: target-kafka:9093
@@ -125,22 +132,31 @@ services:
       retries: 15
       start_period: 45s
 
-  # Kafka UI
+  # ---------------------------------------------------------
+  # UI Tools
+  # ---------------------------------------------------------
+
   kafka-ui:
     image: provectuslabs/kafka-ui:latest
     container_name: kafka-ui
     ports:
       - "8090:8080"
     environment:
-      KAFKA_CLUSTERS_0_NAME: source-cluster
+      # Source Cluster (Confluent)
+      KAFKA_CLUSTERS_0_NAME: source-cluster-confluent
       KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: source-kafka:9092
-      KAFKA_CLUSTERS_0_SCHEMAREGISTRY: http://source-registry:8080/apis/registry/v2
-      KAFKA_CLUSTERS_1_NAME: target-cluster
+      # Note: Confluent SR does not use the /apis/registry/v2 suffix
+      KAFKA_CLUSTERS_0_SCHEMAREGISTRY: http://source-registry:8081
+
+      # Target Cluster (Apache + Apicurio)
+      KAFKA_CLUSTERS_1_NAME: target-cluster-kraft
       KAFKA_CLUSTERS_1_BOOTSTRAPSERVERS: target-kafka:9093
       KAFKA_CLUSTERS_1_SCHEMAREGISTRY: http://target-registry:8080/apis/registry/v2
     depends_on:
       - source-kafka
       - target-kafka
+      - source-registry
+      - target-registry
     networks:
       - kafka-bridge-network
 

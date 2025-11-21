@@ -17,6 +17,13 @@
         <relativePath/>
     </parent>
 
+    <repositories>
+        <repository>
+            <id>confluent</id>
+            <url>https://packages.confluent.io/maven/</url>
+        </repository>
+    </repositories>
+
     <properties>
         <java.version>21</java.version>
         <kotlin.version>1.9.25</kotlin.version>
@@ -68,6 +75,13 @@
             <groupId>io.apicurio</groupId>
             <artifactId>apicurio-registry-common</artifactId>
             <version>${apicurio.version}</version>
+        </dependency>
+
+        <!-- Confluent Serdes for the Consumer -->
+        <dependency>
+            <groupId>io.confluent</groupId>
+            <artifactId>kafka-avro-serializer</artifactId>
+            <version>7.1.1</version>
         </dependency>
 
         <!-- Avro -->
