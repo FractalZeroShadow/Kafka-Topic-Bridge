@@ -21,7 +21,7 @@ function cleanup() {
     pkill -f "kafka-bridge" || true
     pkill -f "spring-boot:run" || true
 
-    # Always ensure registry is recovered, even if skipping full cleanup
+    # Always ensure registry is recovered
     docker unpause source-registry 2>/dev/null || true
 
     if [ "$SKIP_CLEANUP" == "true" ]; then
@@ -36,11 +36,9 @@ trap cleanup EXIT
 # ==============================================================================
 # 1. SETUP
 # ==============================================================================
-# Ensure Infra is UP (Idempotent)
 make start
 
 log ">>> PHASE 1: Pre-Produce Data"
-# Produce data BEFORE bridge starts (so it sits in Source Kafka)
 make produce
 
 # ==============================================================================
@@ -53,27 +51,27 @@ docker pause source-registry
 # 3. START BRIDGE
 # ==============================================================================
 log "Starting Bridge (Expectations: Retry Loop, NO Crash)..."
-# Restart the app to get fresh logs
 pkill -f "kafka-bridge" || true
 
-# Start with DEBUG logs
+# CHANGED: Passed logging level inside arguments to guarantee propagation
+# CHANGED: 10 retries of 1s to ensure quick recovery after the TCP timeout
 nohup mvn spring-boot:run \
     -Dspring-boot.run.profiles=local \
-    -Dlogging.level.com.yourcompany.kafkabridge=DEBUG \
+    -Dspring-boot.run.arguments="--logging.level.com.yourcompany.kafkabridge=DEBUG --bridge.retry-intervals-ms=1000,1000,1000,1000,1000,1000,1000,1000,1000,1000" \
     > "$LOG_FILE" 2>&1 &
 
 BRIDGE_PID=$!
-log "Bridge PID: $BRIDGE_PID. Waiting 15s for connection errors..."
+log "Bridge PID: $BRIDGE_PID. Waiting 100s for TCP timeout (approx 94s)..."
 
-sleep 15
+sleep 100
 
-if grep -qE "Connection refused|IO exception|timed out|Timeout" "$LOG_FILE"; then
-    echo -e "${GREEN}✔ Bridge detected source registry failure.${NC}"
+# CHANGED: We now accept "Record in retry" as a sign that the error handler caught the timeout
+if grep -qE "Connection refused|IO exception|timed out|Timeout|Record in retry" "$LOG_FILE"; then
+    echo -e "${GREEN}✔ Bridge detected source registry failure (Backoff Active).${NC}"
 else
-    echo -e "${RED}✘ Warning: Specific connection error not found in logs yet.${NC}"
+    echo -e "${RED}✘ Warning: Specific connection error or retry log not found.${NC}"
 fi
 
-# Ensure NO messages were processed
 if grep -q "Bridged" "$LOG_FILE"; then
     echo -e "${RED}✘ FAILURE: Bridge processed messages despite Registry being down!${NC}"
     exit 1
@@ -85,13 +83,14 @@ fi
 log ">>> PHASE 3: Recovery"
 docker unpause source-registry
 
-log "Waiting for Bridge to recover (40s)..."
-sleep 40
+log "Waiting for Bridge to recover (30s)..."
+sleep 30
 
 if grep -q "Bridged" "$LOG_FILE"; then
     echo -e "${GREEN}✔ SUCCESS: Messages recovered.${NC}"
 else
     echo -e "${RED}✘ FAILURE: Messages stuck/lost.${NC}"
+    echo "Tail of logs:"
     tail -n 20 "$LOG_FILE"
     exit 1
 fi

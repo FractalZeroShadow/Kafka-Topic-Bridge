@@ -39,14 +39,14 @@ make start
 log "Starting Bridge..."
 pkill -f "kafka-bridge" || true
 
+# CHANGED: Pass logging level in arguments
 nohup mvn spring-boot:run \
     -Dspring-boot.run.profiles=local \
-    -Dlogging.level.com.yourcompany.kafkabridge=DEBUG \
+    -Dspring-boot.run.arguments="--logging.level.com.yourcompany.kafkabridge=DEBUG --bridge.retry-intervals-ms=1000,1000,1000,1000,1000,1000,1000,1000,1000,1000" \
     > "$LOG_FILE" 2>&1 &
 
 BRIDGE_PID=$!
 
-# Wait for startup
 log "Waiting for Bridge to initialize..."
 MAX_RETRIES=30
 COUNT=0
@@ -80,10 +80,10 @@ docker pause target-registry
 log "Producing data while Target Registry is FROZEN..."
 make produce
 
-log "Waiting 10s for backoff..."
-sleep 10
+log "Waiting 100s for TCP timeout..."
+sleep 100
 
-if grep -qE "Connection refused|IO exception|timed out|Timeout" "$LOG_FILE"; then
+if grep -qE "Connection refused|IO exception|timed out|Timeout|Record in retry" "$LOG_FILE"; then
     echo -e "${GREEN}✔ Bridge encountered timeout/error as expected.${NC}"
 else
     log "Warning: Specific error not found yet. Continuing..."
@@ -95,15 +95,14 @@ fi
 log ">>> PHASE 3: Recovery"
 docker unpause target-registry
 
-log "Waiting for retry (40s)..."
-sleep 40
+log "Waiting for retry (30s)..."
+sleep 30
 
 # ==============================================================================
 # 5. VERIFICATION
 # ==============================================================================
 log ">>> PHASE 4: Verification (Manual Consumer)"
 
-# The consume command might fail if network is flaky, so we allow retry logic or simple exit code check
 set +e
 make consume
 EXIT_CODE=$?

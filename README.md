@@ -134,3 +134,29 @@ make produce-bad
 * **Read Committed:** Consumers use `isolation.level=read_committed` to ignore transactional ghosts.
 * **Smart Recovery:** Automatic distinction between fatal serialization errors (Data) and transient network errors (Infra).
 * **Observability:** Exposes Micrometer/Prometheus metrics for `messages.processed` and `messages.failed`.
+
+## Error Handling Priority & Behavior
+
+The bridge uses a tiered error handling strategy. It distinguishes between **Permanent Failures** (which must be skipped immediately) and **Transient/Ambiguous Failures** (which must be retried to prevent data loss).
+
+### Error Classification Matrix
+
+| Exception / Scenario | Classification | Behavior | Outcome |
+| :--- | :--- | :--- | :--- |
+| **Schema Not Found (404)**<br>`ArtifactNotFoundException` | **Permanent Data Error** | **Fail Fast** | Record is **immediately** sent to DLT. Processing continues. |
+| **Bad Configuration**<br>`ClassCastException`<br>`IllegalArgumentException` | **Permanent Code Error** | **Fail Fast** | Record is **immediately** sent to DLT. Processing continues. |
+| **Registry/Broker Down**<br>`ConnectException`<br>`SocketTimeoutException` | **Infrastructure** | **Retry** | Enter Backoff Loop (`30s` -> `5m` -> `15m`). Service halts until connectivity is restored. |
+| **Deserialization Error**<br>`DeserializationException` | **Ambiguous** | **Retry** | **Safe Mode:** Because Registry timeouts often look like deserialization errors, these are **retried** to ensure the service survives outages.<br><br>If the error is a true "Poison Pill" (bad bytes), it will be retried until the backoff exhausts, and *then* sent to DLT. |
+
+### Retry Strategy (Backoff)
+For **Infrastructure** and **Ambiguous** errors, the bridge applies the following non-blocking backoff policy defined in `application.yaml`:
+1.  **Wait 30s** (First attempt)
+2.  **Wait 5m** (Second attempt)
+3.  **Wait 15m** (Subsequent attempts)
+
+If the error resolves (e.g., Registry comes back online), the bridge resumes normal processing automatically.
+
+### Dead Letter Topic (DLT)
+Records that fail permanently (or exhaust retries) are routed to a specific DLT based on the topic mapping:
+* **Preserves Data:** Infrastructure failures are written as valid Avro (if possible).
+* **Preserves Evidence:** "Poison Pills" are written as raw bytes (using `ByteArraySerializer`) to ensure the corrupt payload can be inspected without crashing the DLT consumer.
